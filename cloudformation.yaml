@@ -1,0 +1,828 @@
+Parameters:
+  DeploymentsBucket:
+    Type: String
+    Default: ad-deployments
+    Description: S3 Bucket where deployments are stored
+  ImagesBucket:
+    Type: String
+    Default: ads-resizedimages-datahack
+    Description: S3 Bucket where images are going to be stored
+Resources:
+  adsTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      TableName: ads-cf
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: 'N'
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expdate
+        Enabled: true
+      StreamSpecification:
+        StreamViewType: KEYS_ONLY
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: ads
+  commentsTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      TableName: comments-cf
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: ad_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: 'N'
+      KeySchema:
+        - AttributeName: ad_id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: comments
+  chatsTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      TableName: chats-cf
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: chat_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: 'N'
+      KeySchema:
+        - AttributeName: chat_id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: chats
+  usersTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      TableName: users-cf
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: user_chat
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        - AttributeName: user_chat
+          KeyType: RANGE
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: users
+  imagesBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref ImagesBucket
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: TRUE
+        BlockPublicPolicy: TRUE
+        IgnorePublicAcls: TRUE
+        RestrictPublicBuckets: TRUE
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: ads-images
+  lambdaBasicRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: LambdaRolePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource: arn:aws:logs:*:*:*
+  lambdaRoleToDynamo:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: LambdaRolePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource: arn:aws:logs:*:*:*
+            - Effect: Allow
+              Action:
+              - dynamodb:*
+              Resource:
+              - !GetAtt adsTable.Arn
+              - !GetAtt adsTable.StreamArn
+              - !GetAtt commentsTable.Arn
+              - !GetAtt chatsTable.Arn
+              - !GetAtt usersTable.Arn
+  lambdaRoleToS3:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: LambdaRolePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource: arn:aws:logs:*:*:*
+            - Effect: Allow
+              Action:
+              - s3:*
+              - s3-object-lambda:*
+              Resource: "*"
+  lambdaRoleToS3AndDynamo:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: LambdaRolePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource: arn:aws:logs:*:*:*
+            - Effect: Allow
+              Action:
+              - s3:*
+              - s3-object-lambda:*
+              Resource: "*"
+            - Effect: Allow
+              Action:
+              - dynamodb:*
+              Resource:
+              - !GetAtt adsTable.Arn
+              - !GetAtt commentsTable.Arn
+  stepFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - states.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: StepFuncPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource: arn:aws:logs:*:*:*
+            - Effect: Allow
+              Action:
+              - lambda:InvokeFunction
+              Resource: "*"
+            - Effect: Allow
+              Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              Resource: "*"
+            - Effect: Allow
+              Action:
+              - xray:PutTraceSegments
+              - xray:PutTelemetryRecords
+              - xray:GetSamplingRules
+              - xray:GetSamplingTargets
+              Resource: "*"
+  lambdaRoleToStates:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: LambdaRolePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource: arn:aws:logs:*:*:*
+            - Effect: Allow
+              Action:
+              - states:*
+              Resource: !GetAtt postAdStateMachine.Arn
+  apiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service:
+                - 'apigateway.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: '/'
+      Policies:
+        - PolicyName: ApiPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action: 'lambda:*'
+                Resource: "*"
+  removeComments:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Role:
+        !GetAtt lambdaRoleToDynamo.Arn
+      Environment:
+        Variables:
+          COMMENTS_TABLE: comments-cf
+      PackageType: Zip
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.9
+      Code:
+        S3Bucket: !Ref DeploymentsBucket
+        S3Key: remove_comments.zip
+      Description: Remove comments related to an ad
+      FunctionName: remove-comments-cf
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: remove-comments-lambda
+  dataTableStream:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      Enabled: True
+      EventSourceArn:
+        !GetAtt adsTable.StreamArn
+      FunctionName:
+        !GetAtt removeComments.Arn
+      StartingPosition: LATEST
+  addTimestampToAd:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Role:
+        !GetAtt lambdaBasicRole.Arn
+      PackageType: Zip
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.9
+      Code:
+        S3Bucket: !Ref DeploymentsBucket
+        S3Key: add_timestamp_to_ad.zip
+      Description: Ads timestamp and expdat to the ad tha is going to be inserted in dynamodb
+      FunctionName: add-timestamp-to-ad-cf
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: add-timestamp-to-ad
+  postComment:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Role:
+        !GetAtt lambdaRoleToDynamo.Arn
+      Environment:
+        Variables:
+          ADS_TABLE: ads-cf
+          COMMENTS_TABLE: comments-cf
+      PackageType: Zip
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.9
+      Code:
+        S3Bucket: !Ref DeploymentsBucket
+        S3Key: post_comment.zip
+      Description: Posts new comment to an existing ad
+      FunctionName: post-comment-cf
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: post-comment-lambda
+  resizeImages:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Role:
+        !GetAtt lambdaRoleToS3.Arn
+      PackageType: Zip
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.9
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref ImagesBucket
+      Code:
+        S3Bucket: !Ref DeploymentsBucket
+        S3Key: resize_images.zip
+      Description: Resizes base64 images and stores them into s3 bucket
+      FunctionName: resize-image-cf
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: resize_images
+  postChatMsg:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Role:
+        !GetAtt lambdaRoleToDynamo.Arn
+      Environment:
+        Variables:
+          USERS_TABLE: users-cf
+          CHATS_TABLE: chats-cf
+      PackageType: Zip
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.9
+      Code:
+        S3Bucket: !Ref DeploymentsBucket
+        S3Key: post_chat_msg.zip
+      Description: Posts new message to an already existing chat or creates a new chat
+      FunctionName: post-chat-msg-cf
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: post-chat-msg-lambda
+  getChat:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Role:
+        !GetAtt lambdaRoleToDynamo.Arn
+      Environment:
+        Variables:
+          USERS_TABLE: users-cf
+          CHATS_TABLE: chats-cf
+      PackageType: Zip
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.9
+      Code:
+        S3Bucket: !Ref DeploymentsBucket
+        S3Key: get_chat.zip
+      Description: Gets all messages from an existing chat between two users
+      FunctionName: get-chat-cf
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: get-chat-lambda
+  parseAdPost:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Role:
+        !GetAtt lambdaRoleToStates.Arn
+      PackageType: Zip
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.9
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN: !GetAtt postAdStateMachine.Arn
+      Code:
+        S3Bucket: !Ref DeploymentsBucket
+        S3Key: parse_ad_post.zip
+      Description: Parses api request to step function
+      FunctionName: parse-ad-post-cf
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: parse-ad-post-lambda
+  getAdCommentsImage:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Role:
+        !GetAtt lambdaRoleToS3AndDynamo.Arn
+      PackageType: Zip
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.9
+      Environment:
+        Variables:
+          ADS_TABLE: ads-cf
+          COMMENTS_TABLE: comments-cf
+      Code:
+        S3Bucket: !Ref DeploymentsBucket
+        S3Key: get_ad.zip
+      Description: Get ad and all of its comments and 
+      FunctionName: get-ad-cf
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: get-ad-lambda
+  getAllAds:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Role:
+        !GetAtt lambdaRoleToDynamo.Arn
+      PackageType: Zip
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.9
+      Environment:
+        Variables:
+          ADS_TABLE: ads-cf
+      Code:
+        S3Bucket: !Ref DeploymentsBucket
+        S3Key: get_all_ads.zip
+      Description: Get all ads from table
+      FunctionName: get-all-ads-cf
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: get-all-ads-lambda
+  postAdStateMachine:
+    Type: 'AWS::StepFunctions::StateMachine'
+    Properties:
+      StateMachineName: post-ad-state-machine-cf
+      RoleArn: !GetAtt stepFunctionRole.Arn
+      DefinitionString:
+        !Sub
+        - |-
+          {
+            "Comment": "Post ad state machine",
+            "StartAt": "calculate-dates",
+            "States": {
+              "calculate-dates": {
+                "Type": "Task",
+                "Resource": "arn:aws:states:::lambda:invoke",
+                "OutputPath": "$.Payload",
+                "Parameters": {
+                  "Payload.$": "$",
+                  "FunctionName": "${addTimestampsArn}:$LATEST"
+                },
+                "Retry": [
+                  {
+                    "ErrorEquals": [
+                      "Lambda.ServiceException",
+                      "Lambda.AWSLambdaException",
+                      "Lambda.SdkClientException",
+                      "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 6,
+                    "BackoffRate": 2
+                  }
+                ],
+                "Next": "resize-image"
+              },
+              "resize-image": {
+                "Type": "Task",
+                "Resource": "arn:aws:states:::lambda:invoke",
+                "OutputPath": "$.Payload",
+                "Parameters": {
+                  "Payload.$": "$",
+                  "FunctionName": "${resizeLambdaArn}:$LATEST"
+                },
+                "Retry": [
+                  {
+                    "ErrorEquals": [
+                      "Lambda.ServiceException",
+                      "Lambda.AWSLambdaException",
+                      "Lambda.SdkClientException",
+                      "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 2,
+                    "MaxAttempts": 6,
+                    "BackoffRate": 2
+                  }
+                ],
+                "Next": "dyna-ad-post"
+              },
+              "dyna-ad-post": {
+                "Type": "Task",
+                "Resource": "arn:aws:states:::dynamodb:putItem",
+                "Parameters": {
+                  "TableName": "ads-cf",
+                  "Item": {
+                    "id": {
+                      "S.$": "$.id"
+                    },
+                    "user": {
+                      "S.$": "$.user"
+                    },
+                    "title": {
+                      "S.$": "$.title"
+                    },
+                    "description": {
+                      "S.$": "$.description"
+                    },
+                    "price": {
+                      "S.$": "$.price"
+                    },
+                    "timestamp": {
+                      "N.$": "$.timestamp"
+                    },
+                    "expdate": {
+                      "N.$": "$.expdate"
+                    },
+                    "image_path": {
+                      "S.$": "$.image_path"
+                    }
+                  }
+                },
+                "Next": "Success"
+              },
+              "Success": {
+                "Type": "Succeed"
+              }
+            }
+          }
+        - addTimestampsArn: !GetAtt addTimestampToAd.Arn
+          resizeLambdaArn: !GetAtt resizeImages.Arn
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: post-ad-step-funct
+  adsApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      ApiKeySourceType: HEADER
+      Description: The ads API
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Name: ads-api-cf
+      Tags:
+        - Key: CreatedBy
+          Value: CloudFormation
+        - Key: Name
+          Value: ads-api
+  adApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref adsApi
+      ParentId: !GetAtt adsApi.RootResourceId
+      PathPart: 'ad'
+  adApiPathResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref adsApi
+      ParentId: !GetAtt adApiResource.ResourceId
+      PathPart: '{ad_id}'
+  adsApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref adsApi
+      ParentId: !GetAtt adsApi.RootResourceId
+      PathPart: 'ads'
+  commentApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref adsApi
+      ParentId: !GetAtt adsApi.RootResourceId
+      PathPart: 'comment'
+  chatApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref adsApi
+      ParentId: !GetAtt adsApi.RootResourceId
+      PathPart: 'chat'
+  adApiPost:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      HttpMethod: POST
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: 'Empty'
+      Integration:
+        ConnectionType: INTERNET
+        Credentials: !GetAtt apiRole.Arn
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - StatusCode: 200
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${parseAdPost.Arn}/invocations'
+      OperationName: 'post_ad'
+      ResourceId: !Ref adApiResource
+      RestApiId: !Ref adsApi
+  adApiGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      HttpMethod: GET
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: 'Empty'
+      Integration:
+        ConnectionType: INTERNET
+        Credentials: !GetAtt apiRole.Arn
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - StatusCode: 200
+        RequestTemplates:
+          "application/json": "{\"ad_id\": \"$method.request.path.ad_id\"}"
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${getAdCommentsImage.Arn}/invocations'
+      OperationName: 'get_ad'
+      ResourceId: !Ref adApiPathResource
+      RestApiId: !Ref adsApi
+  adsApiGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      HttpMethod: GET
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: 'Empty'
+      Integration:
+        ConnectionType: INTERNET
+        Credentials: !GetAtt apiRole.Arn
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - StatusCode: 200
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${getAllAds.Arn}/invocations'
+      OperationName: 'get_all_ads'
+      ResourceId: !Ref adsApiResource
+      RestApiId: !Ref adsApi
+  commentApiPost:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      HttpMethod: POST
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: 'Empty'
+      Integration:
+        ConnectionType: INTERNET
+        Credentials: !GetAtt apiRole.Arn
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - StatusCode: 200
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${postComment.Arn}/invocations'
+      OperationName: 'post_comment'
+      ResourceId: !Ref commentApiResource
+      RestApiId: !Ref adsApi
+  chatApiPost:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      HttpMethod: POST
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: 'Empty'
+      Integration:
+        ConnectionType: INTERNET
+        Credentials: !GetAtt apiRole.Arn
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - StatusCode: 200
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${postChatMsg.Arn}/invocations'
+      OperationName: 'post_msg_chat'
+      ResourceId: !Ref chatApiResource
+      RestApiId: !Ref adsApi
+  chatApiGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      HttpMethod: GET
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: 'Empty'
+      Integration:
+        ConnectionType: INTERNET
+        Credentials: !GetAtt apiRole.Arn
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - StatusCode: 200
+        RequestTemplates:
+          "application/json": |- 
+            {
+                "user_id": "$method.request.querystring.user",
+                "from": "$method.request.querystring.from"
+            }
+        PassthroughBehavior: WHEN_NO_MATCH
+        TimeoutInMillis: 29000
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${getChat.Arn}/invocations'
+      OperationName: 'get_chat'
+      ResourceId: !Ref chatApiResource
+      RestApiId: !Ref adsApi
+  adsProdApiDeployment:
+    Type: 'AWS::ApiGateway::Deployment'
+    DependsOn: 
+    - adApiPost
+    - adApiGet
+    - adsApiGet
+    - commentApiPost
+    - chatApiPost
+    - chatApiGet
+    Properties:
+      RestApiId: !Ref adsApi
+      Description: Production ads api deployment
+      StageName: prod
