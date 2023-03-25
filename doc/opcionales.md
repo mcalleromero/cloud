@@ -32,6 +32,21 @@ Pero si hacemos una petición correcta, seteando la autorización con el token d
 
 No he implementado esto en la práctica final porque no he sido capaz de configurar Cognito en cloudformation, pero he dejado una api de prueba con esta funcionalidad por si se quiere probar: https://mar4zgws13.execute-api.eu-west-1.amazonaws.com/prod
 
+El método es `POST /auth` con:
+
+```
+{
+  "AuthFlow": "USER_PASSWORD_AUTH",
+  "ClientId": "3fia69febkjo102q2829s0v9d5",
+  "AuthParameters": {
+    "USERNAME": "mario_123",
+    "PASSWORD": "Ultra.Password456"
+  }
+}
+```
+
+De la respuesta hay que coger el `IdToken` y ponerlo en el Header `Authorization` de la petición `POST /ad`.
+
 # OpenSearch "Serverless"
 
 Como se puede ver en la arquitectura, hay una parte de búsqueda implementada con OpenSearch serverless. He mantenido el código en el directorio `optional_search/`.
