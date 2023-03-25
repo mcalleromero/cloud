@@ -39,6 +39,10 @@ El comando para desplegar es el siguiente:
 aws cloudformation deploy --template-file cloudformation.yaml --stack-name ads-deployment --capabilities CAPABILITY_IAM [--parameter-overrides ImagesBucket=<bucket name> DeploymentsBucket=<bucket name>]
 ```
 
+## Extra
+
+En la documentación de este proyecto hay una colección de Postman sobre la que he estado realizando las pruebas de la API.
+
 ## Arquitectura
 
 ![arquitectura](doc/arq_diagram.drawio.png)
